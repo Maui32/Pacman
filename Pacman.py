@@ -23,31 +23,38 @@ Maze = [
 TILE_SIZE = 50
 
 clock = pygame.time.Clock()
+
+
+Pacman_x = 100
+Pacman_y = 100
+pacman_speed = 5
+
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
 
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_LEFT]:
-                Pacman_x -= pacman_speed
-                if keys [pygame.K_RIGHT]:
-                    Pacman_x + = pacman_speed
-                    if keys[pygame.K_UP]:
-                        Pacman_y -= pacman_speed
-                        if keys[pygame.K_DOWN]:
-                            Pacman_y += pacman_speed
-                            screen.fill(Black)
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT]:
+        Pacman_x -= pacman_speed
+    if keys[pygame.K_RIGHT]:
+        Pacman_x += pacman_speed
+    if keys[pygame.K_UP]:
+        Pacman_y -= pacman_speed
+    if keys[pygame.K_DOWN]:
+        Pacman_y += pacman_speed
 
-                            for row_idx, row in enumerate(Maze):
-                            for col_idx, tile in enumerate(row):
-                                if tile == 1: 
-                                    pygame.draw.rect(sceen, Blue, (col_idx * TILE_SIZE, row_idx * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+    screen.fill(Black)
 
-                                    pygame.draw.cicrle(screen, Yellow, (Pacman_x, Pacman_y), 20)
-                                    pygame.display.flip()
-                                    clock.tick(30)
+    for row_idx, row in enumerate(Maze):
+        for col_idx, tile in enumerate(row):
+            if tile == 1: 
+                pygame.draw.rect(screen, Blue, (col_idx * TILE_SIZE, row_idx * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+
+    pygame.draw.circle(screen, Yellow, (Pacman_x, Pacman_y), 20)
+    pygame.display.flip()
+    clock.tick(30)
                             
             
                         
