@@ -45,73 +45,106 @@ TILE_SIZE = 50
 clock = pygame.time.Clock()
 
 def generate_random_maze():
-    """Generiert ein zufälliges Maze-Layout"""
+    """Generiert ein zufälliges Maze-Layout ähnlich den ersten beiden Leveln"""
     width = 18
     height = 15
     
-    # Basis-Template: Äußere Wände und Ghost-Box
+    # Basis-Template: Äußere Wände
     maze = [[1 for _ in range(width)] for _ in range(height)]
     
-    # Innere Bereiche erstmal frei machen
+    # Innere Bereiche erstmal frei machen (mit Punkten füllen)
     for y in range(1, height - 1):
         for x in range(1, width - 1):
-            maze[y][x] = 0
+            maze[y][x] = 3  # Direkt mit Punkten füllen
     
     # Ghost-Box in der Mitte hinzufügen
     center_x = width // 2
     center_y = height // 2
     
-    # Ghost-Box (3x3)
+    # Ghost-Box (3x3) mit dünnen Wänden drumherum
     for dy in range(-1, 2):
         for dx in range(-1, 2):
             if 0 <= center_y + dy < height and 0 <= center_x + dx < width:
                 maze[center_y + dy][center_x + dx] = 2
     
-    # Zufällige Wände hinzufügen (aber nicht zu viele)
-    wall_density = 0.15  # 15% Wahrscheinlichkeit für Wände
+    # Dünne Wände um die Ghost-Box (Typ 5 = Geister-Wand)
+    # Oben und unten
+    for dx in range(-2, 3):
+        if 0 <= center_x + dx < width:
+            if 0 <= center_y - 2 < height:
+                maze[center_y - 2][center_x + dx] = 5
+            if 0 <= center_y + 2 < height:
+                maze[center_y + 2][center_x + dx] = 5
     
-    for y in range(2, height - 2):
-        for x in range(2, width - 2):
+    # Links und rechts
+    for dy in range(-1, 2):
+        if 0 <= center_y + dy < height:
+            if 0 <= center_x - 2 < width:
+                maze[center_y + dy][center_x - 2] = 5
+            if 0 <= center_x + 2 < width:
+                maze[center_y + dy][center_x + 2] = 5
+    
+    # Strukturierte Wandplatzierung ähnlich den ersten beiden Leveln
+    # 1. Vertikale Säulen in regelmäßigen Abständen
+    for x in [3, 6, 11, 14]:  # Ähnliche Positionen wie in Level 1&2
+        for y in range(2, height - 2):
             # Nicht in Ghost-Box-Bereich
-            if abs(x - center_x) <= 2 and abs(y - center_y) <= 2:
+            if abs(x - center_x) <= 3 and abs(y - center_y) <= 3:
                 continue
             
-            # Nicht zu nah an Pacman Startposition (links oben)
-            if x < 4 and y < 4:
-                continue
-            
-            # Zufällige Wand platzieren
-            if random.random() < wall_density:
+            # Zufällige Unterbrechungen für Gänge (60% Chance für Wand)
+            if random.random() < 0.6:
                 maze[y][x] = 1
     
-    # Zusätzliche Struktur: Einige größere Wandblöcke
-    num_blocks = random.randint(3, 6)
-    for _ in range(num_blocks):
-        block_x = random.randint(2, width - 4)
-        block_y = random.randint(2, height - 4)
-        block_width = random.randint(2, 4)
-        block_height = random.randint(2, 4)
+    # 2. Horizontale Balken
+    for y in [3, 5, 9, 11]:  # Ähnliche Positionen
+        for x in range(3, width - 3):
+            # Nicht in Ghost-Box-Bereich oder bei vertikalen Säulen
+            if (abs(x - center_x) <= 3 and abs(y - center_y) <= 3) or x in [3, 6, 11, 14]:
+                continue
+            
+            # 50% Chance für horizontale Wand-Segmente
+            if random.random() < 0.5:
+                maze[y][x] = 1
+    
+    # 3. Kleine Wand-Cluster für zusätzliche Komplexität
+    num_clusters = random.randint(4, 7)
+    for _ in range(num_clusters):
+        cluster_x = random.randint(2, width - 3)
+        cluster_y = random.randint(2, height - 3)
+        cluster_size = random.randint(1, 3)  # Kleine Cluster
         
-        # Nicht in Ghost-Box oder Startbereich
-        if (abs(block_x - center_x) <= 3 and abs(block_y - center_y) <= 3) or \
-           (block_x < 5 and block_y < 5):
+        # Nicht in Ghost-Box oder zu nah an den Ecken
+        if (abs(cluster_x - center_x) <= 4 and abs(cluster_y - center_y) <= 4) or \
+           cluster_x < 3 or cluster_x > width - 4 or cluster_y < 3 or cluster_y > height - 4:
             continue
         
-        # Block platzieren
-        for dy in range(block_height):
-            for dx in range(block_width):
-                new_x = block_x + dx
-                new_y = block_y + dy
-                if (1 <= new_x < width - 1 and 1 <= new_y < height - 1):
+        # Kleinen Wand-Cluster platzieren
+        for dy in range(cluster_size):
+            for dx in range(cluster_size):
+                new_x = cluster_x + dx
+                new_y = cluster_y + dy
+                if (2 <= new_x < width - 2 and 2 <= new_y < height - 2 and 
+                    maze[new_y][new_x] == 3):  # Nur auf Punkt-Tiles
                     maze[new_y][new_x] = 1
     
-    # Punkte hinzufügen (überall wo frei ist)
-    for y in range(height):
-        for x in range(width):
-            if maze[y][x] == 0:  # Freier Bereich
-                maze[y][x] = 3  # Normale Punkte
+    # 4. Öffnungen in Wänden für bessere Begehbarkeit schaffen
+    # Zufällige Löcher in zu lange Wand-Segmente
+    for y in range(2, height - 2):
+        for x in range(2, width - 2):
+            if maze[y][x] == 1:
+                # Prüfe ob diese Wand von langen Wand-Segmenten umgeben ist
+                surrounding_walls = 0
+                for dx, dy in [(0,1), (0,-1), (1,0), (-1,0)]:
+                    if (0 <= x+dx < width and 0 <= y+dy < height and 
+                        maze[y+dy][x+dx] == 1):
+                        surrounding_walls += 1
+                
+                # Wenn zu viele Wände drumherum, manchmal eine Öffnung schaffen
+                if surrounding_walls >= 3 and random.random() < 0.3:
+                    maze[y][x] = 3  # Wand zu Punkt machen
     
-    # Power-Ups in den Ecken platzieren
+    # Power-Ups in den Ecken platzieren (wie in den ersten Leveln)
     power_up_positions = [
         (1, 1),  # Oben links
         (width - 2, 1),  # Oben rechts  
@@ -246,7 +279,7 @@ def scale_size(width, height=None):
 
 def draw_walls(screen, scale_x, scale_y):
     """Zeichnet Wände als komplett zusammenhängende Fläche ohne Blockgrenzen"""
-    # Erstelle ein Bitmap für alle Wandpositionen
+    # Erstelle ein Bitmap für normale Wände
     wall_bitmap = []
     for row_idx in range(len(Maze)):
         wall_row = []
@@ -254,7 +287,7 @@ def draw_walls(screen, scale_x, scale_y):
             wall_row.append(Maze[row_idx][col_idx] == 1)
         wall_bitmap.append(wall_row)
     
-    # Zeichne horizontale Streifen für zusammenhängende Wände
+    # Zeichne horizontale Streifen für zusammenhängende normale Wände
     for row_idx in range(len(wall_bitmap)):
         col_idx = 0
         while col_idx < len(wall_bitmap[0]):
@@ -279,6 +312,15 @@ def draw_walls(screen, scale_x, scale_y):
                 pygame.draw.rect(screen, Blue, (scaled_x, scaled_y, scaled_width, scaled_height))
             else:
                 col_idx += 1
+    
+    # Zeichne Geister-Wände (Typ 5) separat als dunklere Wände
+    for row_idx, row in enumerate(Maze):
+        for col_idx, tile in enumerate(row):
+            if tile == 5:  # Geister-Wand
+                scaled_x, scaled_y = scale_position(col_idx * TILE_SIZE, row_idx * TILE_SIZE)
+                scaled_width, scaled_height = scale_size(TILE_SIZE, TILE_SIZE)
+                # Dunklere blaue Farbe für Geister-Wände
+                pygame.draw.rect(screen, (0, 0, 128), (scaled_x, scaled_y, scaled_width, scaled_height))
 
 def draw_maze_elements(screen, scale_x, scale_y):
     """Zeichnet alle Maze-Elemente außer Wände"""
@@ -303,6 +345,7 @@ def draw_maze_elements(screen, scale_x, scale_y):
 
 def reset_ghosts():
     """Setzt alle Geister auf ihre Startpositionen zurück"""
+    current_speed = get_current_speed()
     start_positions = [
         (450, 350),  # Rot - Tile-Mitte
         (425, 325),  # Pink - Tile-Mitte
@@ -313,7 +356,8 @@ def reset_ghosts():
     
     for i, ghost in enumerate(ghosts):
         ghost.x, ghost.y = start_positions[i]
-        ghost.direction_x, ghost.direction_y = 0, -5  # Moderate Geschwindigkeit
+        ghost.direction_x, ghost.direction_y = 0, -current_speed  # Level-angepasste Geschwindigkeit
+        ghost.speed = current_speed  # Aktualisiere Geister-Geschwindigkeit
         ghost.in_box = True
         ghost.release_timer = release_times[i]
         ghost.eaten = False
@@ -329,9 +373,10 @@ def is_valid_position(x, y):
         tile_y < 0 or tile_y >= len(Maze)):
         return False
     
-    # Überprüfe ob Tile begehbar ist (0 = frei, 2 = Geister-Box auch erlaubt, 3 = Punkte, 4 = Power-Ups)
+    # Überprüfe ob Tile begehbar ist für Pacman
     tile_value = Maze[tile_y][tile_x]
-    return tile_value != 1  # Nicht Wand
+    # Pacman kann nicht durch normale Wände (1) oder Geister-Wände (5) gehen
+    return tile_value not in [1, 5]
 
 def can_move_in_direction(current_x, current_y, direction_x, direction_y):
     """Prüft ob Bewegung in eine bestimmte Richtung möglich ist"""
@@ -370,7 +415,8 @@ def is_valid_ghost_position(x, y):
         top < 0 or bottom >= len(Maze)):
         return False
     
-    # Geister können durch freie Bereiche (0) und Geister-Box (2) gehen
+    # Geister können durch freie Bereiche (0), Geister-Box (2) und Geister-Wände (5) gehen
+    # aber nicht durch normale Wände (1)
     if (Maze[top][left] == 1 or 
         Maze[top][right] == 1 or 
         Maze[bottom][left] == 1 or 
@@ -388,8 +434,8 @@ class Ghost:
         self.color = color
         self.original_color = color  # Für Power-Up Zustand
         self.direction_x = 0
-        self.direction_y = -5  # Startet mit moderater Bewegung nach oben
-        self.speed = 5  # Moderate Geschwindigkeit passend zu Pacman
+        self.direction_y = -get_current_speed()  # Level-angepasste Startgeschwindigkeit
+        self.speed = get_current_speed()  # Level-angepasste Geschwindigkeit
         self.in_box = True  # Startet in der Geister-Box
         self.release_timer = release_delay  # Verzögerung bevor Geist die Box verlässt
         self.original_release_delay = release_delay  # Original-Verzögerung merken
@@ -423,7 +469,7 @@ class Ghost:
             # Prüfe ob das nächste Tile gültig ist
             if (0 <= next_tile_x < len(Maze[0]) and 
                 0 <= next_tile_y < len(Maze) and 
-                Maze[next_tile_y][next_tile_x] != 1):  # Nicht Wand
+                Maze[next_tile_y][next_tile_x] not in [1]):  # Nur normale Wände blockieren Geister
                 
                 valid_directions.append((dx, dy))
         
@@ -534,19 +580,11 @@ class Ghost:
         self.x = self.start_x
         self.y = self.start_y
         self.direction_x = 0
-        self.direction_y = -5  # Moderate Geschwindigkeit
+        self.direction_y = -self.speed  # Verwende aktuelle Level-Geschwindigkeit
         self.in_box = True
         self.release_timer = self.original_release_delay  # Mit ursprünglicher Verzögerung
         self.eaten = False
         print(f"DEBUG: Geist respawned in Box bei ({self.start_x}, {self.start_y})")
-
-# Erstelle Geister (mit unterschiedlichen Release-Zeiten)
-ghosts = [
-    Ghost(450, 350, Red, 0),      # Rote Geist - sofort
-    Ghost(425, 325, Pink, 90),    # Pinke Geist - nach 3 Sekunden
-    Ghost(475, 325, Orange, 180), # Orange Geist - nach 6 Sekunden
-    Ghost(425, 375, Cyan, 270)    # Cyan Geist - nach 9 Sekunden
-]
 
 # Spiel-Status
 game_over = False
@@ -556,6 +594,15 @@ power_up_timer = 0
 level = 1
 level_completed = False
 
+# *** GESCHWINDIGKEITS-SYSTEM ***
+base_speed = 4  # Basis-Geschwindigkeit für Level 1
+speed_increase_per_level = 0.50  # 50% Erhöhung pro Level
+
+def get_current_speed():
+    """Berechnet die aktuelle Geschwindigkeit basierend auf dem Level"""
+    current_speed = base_speed * (1 + speed_increase_per_level) ** (level - 1)
+    return int(current_speed)  # Als Integer für pixelgenaue Bewegung
+
 # Font für Score-Anzeige
 pygame.font.init()
 score_font = pygame.font.Font(None, 36)
@@ -563,11 +610,19 @@ score_font = pygame.font.Font(None, 36)
 # Initialisiere das erste Level
 generate_new_level()
 
+# Erstelle Geister NACH der Level-Initialisierung (mit unterschiedlichen Release-Zeiten)
+ghosts = [
+    Ghost(450, 350, Red, 0),      # Rote Geist - sofort
+    Ghost(425, 325, Pink, 90),    # Pinke Geist - nach 3 Sekunden
+    Ghost(475, 325, Orange, 180), # Orange Geist - nach 6 Sekunden
+    Ghost(425, 375, Cyan, 270)    # Cyan Geist - nach 9 Sekunden
+]
+
 # *** ZUFÄLLIGE PACMAN SPAWN-POSITION ***
 spawn_pos = get_random_spawn_position()
 Pacman_x = spawn_pos[0]  # Zufällige Position - Tile-Mitte
 Pacman_y = spawn_pos[1]  # Zufällige Position - Tile-Mitte
-pacman_speed = 5  # Moderate tile-basierte Bewegung
+pacman_speed = get_current_speed()  # Level-angepasste Geschwindigkeit
 pacman_radius = 20  # Größer, damit Gänge gut gefüllt werden
 direction_x = 0  # Startet stillstehend
 direction_y = 0  # Startet stillstehend
@@ -716,6 +771,10 @@ while True:
                     power_up_active = False
                     power_up_timer = 0
                     
+                    # *** GESCHWINDIGKEIT FÜR NEUES LEVEL ANPASSEN ***
+                    pacman_speed = get_current_speed()
+                    print(f"Neue Geschwindigkeit für Level {level}: {pacman_speed}")
+                    
                     # Neues Level-Layout generieren (jetzt mit Zufalls-Generierung ab Level 3)
                     generate_new_level()
                     if level <= 2:
@@ -730,7 +789,7 @@ while True:
                     direction_x = 0  # Startet stillstehend
                     direction_y = 0
                     
-                    # Geister zurücksetzen
+                    # Geister zurücksetzen (mit neuer Geschwindigkeit)
                     reset_ghosts()
     
     else:
@@ -748,9 +807,13 @@ while True:
                     game_over = False
                     level_completed = False
                     score = 0
-                    level = 1
+                    level = 1  # Zurück zu Level 1
                     power_up_active = False
                     power_up_timer = 0
+                    
+                    # *** GESCHWINDIGKEIT ZURÜCKSETZEN ***
+                    pacman_speed = get_current_speed()  # Level 1 Geschwindigkeit
+                    print(f"Spiel neugestartet - Geschwindigkeit zurückgesetzt: {pacman_speed}")
                     
                     # *** PACMAN ZUFÄLLIG SPAWNEN BEI NEUSTART ***
                     spawn_pos = get_random_spawn_position()
@@ -764,7 +827,7 @@ while True:
                     # Maze zurücksetzen (Level 1 wiederherstellen)
                     generate_new_level()
                     
-                    # Geister zurücksetzen
+                    # Geister zurücksetzen (mit Level 1 Geschwindigkeit)
                     reset_ghosts()
 
     # *** VOLLBILD-KOMPATIBLES RENDERING ***
