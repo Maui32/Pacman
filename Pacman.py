@@ -1,9 +1,15 @@
 import pygame
 import sys
+import random
 
 pygame.init()
 screen = pygame.display.set_mode((900,700))
 pygame.display.set_caption("Pacman")
+
+# *** VOLLBILD-MODUS VARIABLEN ***
+fullscreen = False
+original_screen_size = (900, 700)
+current_screen_size = (900, 700)
 
 
 Black = (0,0,0)
@@ -38,53 +44,262 @@ TILE_SIZE = 50
 
 clock = pygame.time.Clock()
 
+def generate_random_maze():
+    """Generiert ein zufälliges Maze-Layout"""
+    width = 18
+    height = 15
+    
+    # Basis-Template: Äußere Wände und Ghost-Box
+    maze = [[1 for _ in range(width)] for _ in range(height)]
+    
+    # Innere Bereiche erstmal frei machen
+    for y in range(1, height - 1):
+        for x in range(1, width - 1):
+            maze[y][x] = 0
+    
+    # Ghost-Box in der Mitte hinzufügen
+    center_x = width // 2
+    center_y = height // 2
+    
+    # Ghost-Box (3x3)
+    for dy in range(-1, 2):
+        for dx in range(-1, 2):
+            if 0 <= center_y + dy < height and 0 <= center_x + dx < width:
+                maze[center_y + dy][center_x + dx] = 2
+    
+    # Zufällige Wände hinzufügen (aber nicht zu viele)
+    wall_density = 0.15  # 15% Wahrscheinlichkeit für Wände
+    
+    for y in range(2, height - 2):
+        for x in range(2, width - 2):
+            # Nicht in Ghost-Box-Bereich
+            if abs(x - center_x) <= 2 and abs(y - center_y) <= 2:
+                continue
+            
+            # Nicht zu nah an Pacman Startposition (links oben)
+            if x < 4 and y < 4:
+                continue
+            
+            # Zufällige Wand platzieren
+            if random.random() < wall_density:
+                maze[y][x] = 1
+    
+    # Zusätzliche Struktur: Einige größere Wandblöcke
+    num_blocks = random.randint(3, 6)
+    for _ in range(num_blocks):
+        block_x = random.randint(2, width - 4)
+        block_y = random.randint(2, height - 4)
+        block_width = random.randint(2, 4)
+        block_height = random.randint(2, 4)
+        
+        # Nicht in Ghost-Box oder Startbereich
+        if (abs(block_x - center_x) <= 3 and abs(block_y - center_y) <= 3) or \
+           (block_x < 5 and block_y < 5):
+            continue
+        
+        # Block platzieren
+        for dy in range(block_height):
+            for dx in range(block_width):
+                new_x = block_x + dx
+                new_y = block_y + dy
+                if (1 <= new_x < width - 1 and 1 <= new_y < height - 1):
+                    maze[new_y][new_x] = 1
+    
+    # Punkte hinzufügen (überall wo frei ist)
+    for y in range(height):
+        for x in range(width):
+            if maze[y][x] == 0:  # Freier Bereich
+                maze[y][x] = 3  # Normale Punkte
+    
+    # Power-Ups in den Ecken platzieren
+    power_up_positions = [
+        (1, 1),  # Oben links
+        (width - 2, 1),  # Oben rechts  
+        (1, height - 2),  # Unten links
+        (width - 2, height - 2)  # Unten rechts
+    ]
+    
+    for x, y in power_up_positions:
+        if maze[y][x] == 3:  # Nur wenn es ein normaler Punkt ist
+            maze[y][x] = 4  # Power-Up
+    
+    return maze
+
 def generate_new_level():
     """Generiert ein neues Level-Layout basierend auf der Level-Nummer"""
     global Maze, level
     
-    # Verschiedene Level-Layouts
-    level_layouts = [
-        # Level 1 (Original)
-        [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,4,3,3,3,3,3,3,3,1,3,3,3,3,3,3,4,1],
-            [1,3,1,1,3,1,1,1,3,1,3,1,1,1,3,1,3,1],
-            [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1],
-            [1,3,1,3,1,1,1,3,1,1,1,3,1,1,1,3,1,1],
-            [1,3,3,3,3,3,1,3,3,3,3,3,1,3,3,3,3,1],
-            [1,1,1,1,1,3,1,1,2,2,2,1,1,3,1,1,1,1],
-            [1,3,3,3,3,3,3,3,2,2,2,3,3,3,3,3,3,1],
-            [1,3,1,1,3,1,3,1,2,2,2,1,3,1,3,1,1,1],
-            [1,3,3,3,3,1,3,3,3,1,3,3,3,1,3,3,3,1],
-            [1,1,1,1,3,1,1,1,3,1,3,1,1,1,3,1,3,1],
-            [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1,3,1],
-            [1,3,1,1,1,1,3,1,1,3,1,1,3,1,1,1,3,1],
-            [1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-        ],
-        # Level 2 - Anderes Layout
-        [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,1],
-            [1,3,1,1,1,3,1,1,1,1,1,1,3,1,1,1,3,1],
-            [1,3,3,3,3,3,3,3,3,1,3,3,3,3,3,3,3,1],
-            [1,3,1,3,1,1,3,1,3,1,3,1,3,1,1,3,1,1],
-            [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1],
-            [1,1,1,3,1,1,1,1,2,2,2,1,1,1,1,3,1,1],
-            [1,3,3,3,3,3,3,3,2,2,2,3,3,3,3,3,3,1],
-            [1,3,1,3,1,1,1,1,2,2,2,1,1,1,1,3,1,1],
-            [1,3,3,3,3,3,3,3,3,1,3,3,3,3,3,3,3,1],
-            [1,3,1,3,1,1,3,1,3,1,3,1,3,1,1,3,1,1],
-            [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1],
-            [1,3,1,1,1,3,1,1,1,1,1,1,3,1,1,1,3,1],
-            [1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    if level <= 2:
+        # Erste 2 Level sind vordefiniert für sanften Einstieg
+        level_layouts = [
+            # Level 1 (Original - einfacher Start)
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,4,3,3,3,3,3,3,3,1,3,3,3,3,3,3,4,1],
+                [1,3,1,1,3,1,1,1,3,1,3,1,1,1,3,1,3,1],
+                [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1],
+                [1,3,1,3,1,1,1,3,1,1,1,3,1,1,1,3,1,1],
+                [1,3,3,3,3,3,1,3,3,3,3,3,1,3,3,3,3,1],
+                [1,1,1,1,1,3,1,1,2,2,2,1,1,3,1,1,1,1],
+                [1,3,3,3,3,3,3,3,2,2,2,3,3,3,3,3,3,1],
+                [1,3,1,1,3,1,3,1,2,2,2,1,3,1,3,1,1,1],
+                [1,3,3,3,3,1,3,3,3,1,3,3,3,1,3,3,3,1],
+                [1,1,1,1,3,1,1,1,3,1,3,1,1,1,3,1,3,1],
+                [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1,3,1],
+                [1,3,1,1,1,1,3,1,1,3,1,1,3,1,1,1,3,1],
+                [1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            # Level 2 - Anderes vordefiniertes Layout
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,1],
+                [1,3,1,1,1,3,1,1,1,1,1,1,3,1,1,1,3,1],
+                [1,3,3,3,3,3,3,3,3,1,3,3,3,3,3,3,3,1],
+                [1,3,1,3,1,1,3,1,3,1,3,1,3,1,1,3,1,1],
+                [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1],
+                [1,1,1,3,1,1,1,1,2,2,2,1,1,1,1,3,1,1],
+                [1,3,3,3,3,3,3,3,2,2,2,3,3,3,3,3,3,1],
+                [1,3,1,3,1,1,1,1,2,2,2,1,1,1,1,3,1,1],
+                [1,3,3,3,3,3,3,3,3,1,3,3,3,3,3,3,3,1],
+                [1,3,1,3,1,1,3,1,3,1,3,1,3,1,1,3,1,1],
+                [1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1],
+                [1,3,1,1,1,3,1,1,1,1,1,1,3,1,1,1,3,1],
+                [1,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ]
         ]
-    ]
+        
+        layout_index = (level - 1) % len(level_layouts)
+        Maze = [row[:] for row in level_layouts[layout_index]]  # Deep copy
+    else:
+        # Ab Level 3: Zufällig generierte Level
+        print(f"Generiere zufälliges Level {level}...")
+        Maze = generate_random_maze()
+        print(f"Zufälliges Level {level} erstellt!")
+
+def get_random_spawn_position():
+    """Finde eine zufällige freie Position für Pacman"""
+    free_positions = []
     
-    # Wähle Layout basierend auf Level (mit Wiederholung für höhere Level)
-    layout_index = (level - 1) % len(level_layouts)
-    Maze = [row[:] for row in level_layouts[layout_index]]  # Deep copy
+    # Sammle alle freien Positionen (nicht Wand, nicht Ghost-Box)
+    for y in range(len(Maze)):
+        for x in range(len(Maze[0])):
+            tile_value = Maze[y][x]
+            # Freie Bereiche: 0=leer, 3=Punkte, 4=Power-Ups (nicht 1=Wand, nicht 2=Ghost-Box)
+            if tile_value in [0, 3, 4]:
+                # Konvertiere zu Pixel-Position (Tile-Mitte)
+                pixel_x = x * TILE_SIZE + TILE_SIZE // 2
+                pixel_y = y * TILE_SIZE + TILE_SIZE // 2
+                free_positions.append((pixel_x, pixel_y))
+    
+    # Wähle zufällige Position aus den freien Positionen
+    if free_positions:
+        return random.choice(free_positions)
+    else:
+        # Fallback: Standard-Position falls keine freien Plätze gefunden
+        return (75, 75)
+
+def toggle_fullscreen():
+    """Wechselt zwischen Vollbild und Fenster-Modus"""
+    global screen, fullscreen, current_screen_size
+    
+    if fullscreen:
+        # Zurück zum Fenster-Modus
+        screen = pygame.display.set_mode(original_screen_size)
+        fullscreen = False
+        current_screen_size = original_screen_size
+        print("Fenster-Modus aktiviert")
+    else:
+        # Zu Vollbild-Modus wechseln
+        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        fullscreen = True
+        current_screen_size = screen.get_size()
+        print(f"Vollbild-Modus aktiviert: {current_screen_size}")
+
+def get_scale_factors():
+    """Berechnet Skalierungsfaktoren für verschiedene Bildschirmgrößen"""
+    if fullscreen:
+        scale_x = current_screen_size[0] / original_screen_size[0]
+        scale_y = current_screen_size[1] / original_screen_size[1]
+        # Verwende den kleineren Faktor für gleichmäßige Skalierung
+        scale = min(scale_x, scale_y)
+        return scale, scale
+    return 1.0, 1.0
+
+def scale_position(x, y):
+    """Skaliert eine Position für den aktuellen Bildschirm"""
+    scale_x, scale_y = get_scale_factors()
+    if fullscreen:
+        # Zentriere das Spiel auf dem Bildschirm
+        offset_x = (current_screen_size[0] - (original_screen_size[0] * scale_x)) // 2
+        offset_y = (current_screen_size[1] - (original_screen_size[1] * scale_y)) // 2
+        return int(x * scale_x + offset_x), int(y * scale_y + offset_y)
+    return x, y
+
+def scale_size(width, height=None):
+    """Skaliert eine Größe für den aktuellen Bildschirm"""
+    if height is None:
+        height = width
+    scale_x, scale_y = get_scale_factors()
+    return int(width * scale_x), int(height * scale_y)
+
+def draw_walls(screen, scale_x, scale_y):
+    """Zeichnet Wände als komplett zusammenhängende Fläche ohne Blockgrenzen"""
+    # Erstelle ein Bitmap für alle Wandpositionen
+    wall_bitmap = []
+    for row_idx in range(len(Maze)):
+        wall_row = []
+        for col_idx in range(len(Maze[0])):
+            wall_row.append(Maze[row_idx][col_idx] == 1)
+        wall_bitmap.append(wall_row)
+    
+    # Zeichne horizontale Streifen für zusammenhängende Wände
+    for row_idx in range(len(wall_bitmap)):
+        col_idx = 0
+        while col_idx < len(wall_bitmap[0]):
+            if wall_bitmap[row_idx][col_idx]:
+                # Finde Ende des horizontalen Wandstreifens
+                start_col = col_idx
+                while col_idx < len(wall_bitmap[0]) and wall_bitmap[row_idx][col_idx]:
+                    col_idx += 1
+                end_col = col_idx
+                
+                # Zeichne den horizontalen Streifen
+                x = start_col * TILE_SIZE
+                y = row_idx * TILE_SIZE
+                width = (end_col - start_col) * TILE_SIZE
+                height = TILE_SIZE
+                
+                # Skalierung anwenden
+                scaled_x, scaled_y = scale_position(x, y)
+                scaled_width = int(width * scale_x)
+                scaled_height = int(height * scale_y)
+                
+                pygame.draw.rect(screen, Blue, (scaled_x, scaled_y, scaled_width, scaled_height))
+            else:
+                col_idx += 1
+
+def draw_maze_elements(screen, scale_x, scale_y):
+    """Zeichnet alle Maze-Elemente außer Wände"""
+    for row_idx, row in enumerate(Maze):
+        for col_idx, tile in enumerate(row):
+            scaled_x, scaled_y = scale_position(col_idx * TILE_SIZE, row_idx * TILE_SIZE)
+            scaled_width, scaled_height = scale_size(TILE_SIZE, TILE_SIZE)
+            
+            if tile == 2:  # Geister-Box
+                pygame.draw.rect(screen, Gray, (scaled_x, scaled_y, scaled_width, scaled_height))
+            elif tile == 3:  # Punkte
+                # Zeichne kleine weiße Punkte in der Mitte der Tiles
+                center_x, center_y = scale_position(col_idx * TILE_SIZE + TILE_SIZE // 2, row_idx * TILE_SIZE + TILE_SIZE // 2)
+                point_radius = max(1, int(3 * scale_x))
+                pygame.draw.circle(screen, White, (center_x, center_y), point_radius)
+            elif tile == 4:  # Power-Ups
+                # Zeichne große gelbe Punkte mit pulsierendem Effekt
+                center_x, center_y = scale_position(col_idx * TILE_SIZE + TILE_SIZE // 2, row_idx * TILE_SIZE + TILE_SIZE // 2)
+                pulse = abs(pygame.time.get_ticks() % 1000 - 500) / 500.0  # Pulsiert zwischen 0 und 1
+                powerup_radius = max(3, int((8 + pulse * 3) * scale_x))
+                pygame.draw.circle(screen, Yellow, (center_x, center_y), powerup_radius)
 
 def reset_ghosts():
     """Setzt alle Geister auf ihre Startpositionen zurück"""
@@ -181,7 +396,7 @@ class Ghost:
         self.eaten = False  # Wurde der Geist gefressen?
         
     def find_path_to_pacman(self):
-        """Finde den direktesten Weg zu Pacman - aggressive Verfolgung"""
+        """Finde den direktesten Weg zu Pacman - oder laufe weg wenn Power-Up aktiv"""
         current_tile_x = self.x // TILE_SIZE
         current_tile_y = self.y // TILE_SIZE
         
@@ -220,22 +435,43 @@ class Ghost:
         if len(valid_directions) > 1 and opposite_dir in valid_directions:
             valid_directions.remove(opposite_dir)
         
-        # Finde die Richtung mit der kleinsten Entfernung zu Pacman
-        best_direction = valid_directions[0]
-        best_distance = float('inf')
-        
-        for dx, dy in valid_directions:
-            next_tile_x = current_tile_x + dx
-            next_tile_y = current_tile_y + dy
+        # *** FLUCHTVERHALTEN: Wenn Power-Up aktiv ist, laufe WEG von Pacman ***
+        if power_up_active and not self.eaten:
+            best_direction = valid_directions[0]
+            best_distance = -1  # Wir wollen die GRÖSSTE Entfernung
             
-            # Berechne Manhattan-Entfernung zu Pacman
-            distance = abs(next_tile_x - pacman_tile_x) + abs(next_tile_y - pacman_tile_y)
+            for dx, dy in valid_directions:
+                next_tile_x = current_tile_x + dx
+                next_tile_y = current_tile_y + dy
+                
+                # Berechne Manhattan-Entfernung zu Pacman
+                distance = abs(next_tile_x - pacman_tile_x) + abs(next_tile_y - pacman_tile_y)
+                
+                # *** WICHTIG: Wähle die Richtung mit der GRÖSSTEN Entfernung ***
+                if distance > best_distance:
+                    best_distance = distance
+                    best_direction = (dx, dy)
             
-            if distance < best_distance:
-                best_distance = distance
-                best_direction = (dx, dy)
+            return best_direction
         
-        return best_direction
+        else:
+            # *** JAGDVERHALTEN: Normales Verhalten - Jage Pacman ***
+            best_direction = valid_directions[0]
+            best_distance = float('inf')
+            
+            for dx, dy in valid_directions:
+                next_tile_x = current_tile_x + dx
+                next_tile_y = current_tile_y + dy
+                
+                # Berechne Manhattan-Entfernung zu Pacman
+                distance = abs(next_tile_x - pacman_tile_x) + abs(next_tile_y - pacman_tile_y)
+                
+                # *** WICHTIG: Wähle die Richtung mit der KLEINSTEN Entfernung ***
+                if distance < best_distance:
+                    best_distance = distance
+                    best_direction = (dx, dy)
+            
+            return best_direction
         
     def move(self):
         # Warten bis Release-Timer abgelaufen ist
@@ -252,29 +488,28 @@ class Ghost:
             self.in_box = False
         
         if self.in_box:
-            # Bewege dich einfach nach oben aus der Box
+           
             self.direction_x = 0
             self.direction_y = -self.speed
         else:
-            # Kontinuierliche Bewegung - ändere Richtung bei Kollision oder regelmäßig
-            # Berechne neue Position
+            
             test_x = self.x + self.direction_x
             test_y = self.y + self.direction_y
             
-            # Prüfe ob aktuelle Richtung blockiert ist mit einfacher Tile-Prüfung
+           
             if not is_valid_position(test_x, test_y):
-                # Finde neue Richtung
+               
                 direction = self.find_path_to_pacman()
                 self.direction_x = direction[0] * self.speed
                 self.direction_y = direction[1] * self.speed
             
-            # Regelmäßig Richtung neu berechnen (alle 45 Frames)
-            elif pygame.time.get_ticks() % 45 == 0:
+            # *** RICHTUNGS-UPDATE: Alle 20 Frames - sowohl beim Jagen als auch beim Weglaufen ***
+            elif pygame.time.get_ticks() % 20 == 0:
                 direction = self.find_path_to_pacman()
                 new_dir_x = direction[0] * self.speed
                 new_dir_y = direction[1] * self.speed
                 
-                # Ändere Richtung wenn sie anders ist (aktive Verfolgung!)
+                # Richtung ändern (sowohl für Jagd- als auch für Fluchtverhalten)
                 if new_dir_x != self.direction_x or new_dir_y != self.direction_y:
                     self.direction_x = new_dir_x
                     self.direction_y = new_dir_y
@@ -290,7 +525,7 @@ class Ghost:
     
     def draw(self, screen):
         if not self.eaten:
-            # Zeige blaue Farbe wenn Power-Up aktiv ist, sonst normale Farbe
+            # *** VISUELLER INDIKATOR: Zeige blaue Farbe wenn Power-Up aktiv ist (= Geister laufen weg) ***
             color = Blue if power_up_active else self.original_color
             pygame.draw.circle(screen, color, (int(self.x), int(self.y)), 18)
     
@@ -328,9 +563,10 @@ score_font = pygame.font.Font(None, 36)
 # Initialisiere das erste Level
 generate_new_level()
 
-
-Pacman_x = 75  # Position in einem freien Bereich (1*50 + 25) - Tile-Mitte
-Pacman_y = 75  # Position in einem freien Bereich (1*50 + 25) - Tile-Mitte
+# *** ZUFÄLLIGE PACMAN SPAWN-POSITION ***
+spawn_pos = get_random_spawn_position()
+Pacman_x = spawn_pos[0]  # Zufällige Position - Tile-Mitte
+Pacman_y = spawn_pos[1]  # Zufällige Position - Tile-Mitte
 pacman_speed = 5  # Moderate tile-basierte Bewegung
 pacman_radius = 20  # Größer, damit Gänge gut gefüllt werden
 direction_x = 0  # Startet stillstehend
@@ -348,7 +584,10 @@ while True:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:  # Input Buffering - speichere gewünschte Richtung
-                if event.key == pygame.K_LEFT:
+                # *** VOLLBILD-TOGGLE MIT F11 ***
+                if event.key == pygame.K_F11:
+                    toggle_fullscreen()
+                elif event.key == pygame.K_LEFT:
                     next_direction_x = -pacman_speed
                     next_direction_y = 0
                 elif event.key == pygame.K_RIGHT:
@@ -466,7 +705,10 @@ while True:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
+                # *** VOLLBILD-TOGGLE AUCH IM LEVEL COMPLETE MENÜ ***
+                if event.key == pygame.K_F11:
+                    toggle_fullscreen()
+                elif event.key == pygame.K_SPACE:
                     # Nächstes Level starten
                     print(f"Starte Level {level + 1}")
                     level_completed = False
@@ -474,13 +716,17 @@ while True:
                     power_up_active = False
                     power_up_timer = 0
                     
-                    # Neues Level-Layout generieren
+                    # Neues Level-Layout generieren (jetzt mit Zufalls-Generierung ab Level 3)
                     generate_new_level()
-                    print(f"Neues Layout für Level {level} geladen")
+                    if level <= 2:
+                        print(f"Vordefiniertes Layout für Level {level} geladen")
+                    else:
+                        print(f"Zufälliges Layout für Level {level} generiert!")
                     
-                    # Pacman zurücksetzen - in Tile-Mitte
-                    Pacman_x = 75  # Tile-Mitte
-                    Pacman_y = 75  # Tile-Mitte
+                    # *** PACMAN ZUFÄLLIG SPAWNEN ***
+                    spawn_pos = get_random_spawn_position()
+                    Pacman_x = spawn_pos[0]  # Zufällige Position - Tile-Mitte
+                    Pacman_y = spawn_pos[1]  # Zufällige Position - Tile-Mitte
                     direction_x = 0  # Startet stillstehend
                     direction_y = 0
                     
@@ -494,7 +740,10 @@ while True:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
+                # *** VOLLBILD-TOGGLE AUCH IM GAME OVER MENÜ ***
+                if event.key == pygame.K_F11:
+                    toggle_fullscreen()
+                elif event.key == pygame.K_SPACE:
                     # Spiel neu starten - Original-like Reset
                     game_over = False
                     level_completed = False
@@ -502,8 +751,11 @@ while True:
                     level = 1
                     power_up_active = False
                     power_up_timer = 0
-                    Pacman_x = 75  # Tile-Mitte
-                    Pacman_y = 75  # Tile-Mitte
+                    
+                    # *** PACMAN ZUFÄLLIG SPAWNEN BEI NEUSTART ***
+                    spawn_pos = get_random_spawn_position()
+                    Pacman_x = spawn_pos[0]  # Zufällige Position - Tile-Mitte
+                    Pacman_y = spawn_pos[1]  # Zufällige Position - Tile-Mitte
                     direction_x = 0  # Startet stillstehend
                     direction_y = 0
                     next_direction_x = 0  # Reset Input Buffer
@@ -515,68 +767,110 @@ while True:
                     # Geister zurücksetzen
                     reset_ghosts()
 
-    screen.fill(Black)
+    # *** VOLLBILD-KOMPATIBLES RENDERING ***
+    if fullscreen:
+        # Schwarzen Hintergrund für Vollbild
+        screen.fill(Black)
+    else:
+        screen.fill(Black)
 
-    for row_idx, row in enumerate(Maze):
-        for col_idx, tile in enumerate(row):
-            if tile == 1: 
-                pygame.draw.rect(screen, Blue, (col_idx * TILE_SIZE, row_idx * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-            elif tile == 2:  # Geister-Box
-                pygame.draw.rect(screen, Gray, (col_idx * TILE_SIZE, row_idx * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-            elif tile == 3:  # Punkte
-                # Zeichne kleine weiße Punkte in der Mitte der Tiles
-                center_x = col_idx * TILE_SIZE + TILE_SIZE // 2
-                center_y = row_idx * TILE_SIZE + TILE_SIZE // 2
-                pygame.draw.circle(screen, White, (center_x, center_y), 3)
-            elif tile == 4:  # Power-Ups
-                # Zeichne große gelbe Punkte
-                center_x = col_idx * TILE_SIZE + TILE_SIZE // 2
-                center_y = row_idx * TILE_SIZE + TILE_SIZE // 2
-                pygame.draw.circle(screen, Yellow, (center_x, center_y), 8)
+    # Skalierungsfaktoren berechnen
+    scale_x, scale_y = get_scale_factors()
+
+    # *** VERBESSERTE WAND-DARSTELLUNG FÜR VOLLBILD ***
+    draw_walls(screen, scale_x, scale_y)
+    draw_maze_elements(screen, scale_x, scale_y)
     
     if not game_over and not level_completed:
-        # Zeichne Pacman
-        pygame.draw.circle(screen, Yellow, (Pacman_x, Pacman_y), pacman_radius)
+        # *** SKALIERTES PACMAN RENDERING ***
+        scaled_pacman_x, scaled_pacman_y = scale_position(Pacman_x, Pacman_y)
+        scaled_pacman_radius = max(5, int(pacman_radius * scale_x))
+        pygame.draw.circle(screen, Yellow, (scaled_pacman_x, scaled_pacman_y), scaled_pacman_radius)
         
-        # Zeichne Geister
+        # *** SKALIERTE GEISTER RENDERING ***
         for ghost in ghosts:
-            ghost.draw(screen)
+            if not ghost.eaten:
+                scaled_ghost_x, scaled_ghost_y = scale_position(ghost.x, ghost.y)
+                scaled_ghost_radius = max(4, int(18 * scale_x))
+                color = Blue if power_up_active else ghost.original_color
+                pygame.draw.circle(screen, color, (scaled_ghost_x, scaled_ghost_y), scaled_ghost_radius)
         
-        # Score anzeigen
-        score_text = score_font.render(f"Score: {score}", True, White)
-        screen.blit(score_text, (10, 10))
+        # *** SKALIERTE UI ELEMENTE ***
+        font_size = max(18, int(36 * scale_x))
+        ui_font = pygame.font.Font(None, font_size)
         
-        # Level anzeigen
-        level_text = score_font.render(f"Level: {level}", True, White)
-        screen.blit(level_text, (10, 50))
+        score_text = ui_font.render(f"Score: {score}", True, White)
+        level_text = ui_font.render(f"Level: {level}", True, White)
+        
+        ui_x, ui_y = scale_position(10, 10)
+        screen.blit(score_text, (ui_x, ui_y))
+        
+        level_y = ui_y + int(40 * scale_y)
+        screen.blit(level_text, (ui_x, level_y))
         
         # Power-Up Status anzeigen
         if power_up_active:
             remaining_time = max(0, (power_up_timer - pygame.time.get_ticks()) // 1000)
-            power_text = score_font.render(f"Power-Up: {remaining_time}s", True, Yellow)
-            screen.blit(power_text, (10, 90))
+            power_text = ui_font.render(f"Power-Up: {remaining_time}s", True, Yellow)
+            power_y = level_y + int(40 * scale_y)
+            screen.blit(power_text, (ui_x, power_y))
+            
+        # Vollbild-Hinweis
+        if fullscreen:
+            hint_font = pygame.font.Font(None, max(16, int(24 * scale_x)))
+            hint_text = hint_font.render("F11: Vollbild beenden", True, White)
+            hint_x = current_screen_size[0] - hint_text.get_width() - 10
+            hint_y = 10
+            screen.blit(hint_text, (hint_x, hint_y))
+        else:
+            hint_font = pygame.font.Font(None, 24)
+            hint_text = hint_font.render("F11: Vollbild", True, White)
+            screen.blit(hint_text, (original_screen_size[0] - hint_text.get_width() - 10, 10))
     
     elif level_completed:
-        # Level Completed Text
-        font = pygame.font.Font(None, 74)
+        # *** SKALIERTES LEVEL COMPLETED MENÜ ***
+        menu_font_size = max(37, int(74 * min(scale_x, scale_y)))
+        small_font_size = max(18, int(36 * min(scale_x, scale_y)))
+        
+        font = pygame.font.Font(None, menu_font_size)
+        small_font = pygame.font.Font(None, small_font_size)
+        
         completed_text = font.render("LEVEL COMPLETED!", True, Yellow)
         score_display = font.render(f"Score: {score}", True, White)
         next_level_text = font.render(f"Next: Level {level + 1}", True, Green)
-        continue_text = score_font.render("Drücke SPACE um fortzufahren", True, White)
+        continue_text = small_font.render("Drücke SPACE um fortzufahren", True, White)
         
-        screen.blit(completed_text, (200, 250))
-        screen.blit(score_display, (300, 320))
-        screen.blit(next_level_text, (280, 390))
-        screen.blit(continue_text, (250, 460))
+        # Zentriere die Texte horizontal und vertikal
+        screen_center_x = current_screen_size[0] // 2
+        screen_center_y = current_screen_size[1] // 2
+        
+        completed_rect = completed_text.get_rect(center=(screen_center_x, screen_center_y - int(80 * scale_y)))
+        score_rect = score_display.get_rect(center=(screen_center_x, screen_center_y - int(20 * scale_y)))
+        next_rect = next_level_text.get_rect(center=(screen_center_x, screen_center_y + int(40 * scale_y)))
+        continue_rect = continue_text.get_rect(center=(screen_center_x, screen_center_y + int(100 * scale_y)))
+        
+        screen.blit(completed_text, completed_rect)
+        screen.blit(score_display, score_rect)
+        screen.blit(next_level_text, next_rect)
+        screen.blit(continue_text, continue_rect)
     
     elif game_over:
-        # Game Over Text
-        font = pygame.font.Font(None, 74)
+        # *** SKALIERTES GAME OVER MENÜ ***
+        menu_font_size = max(37, int(74 * min(scale_x, scale_y)))
+        
+        font = pygame.font.Font(None, menu_font_size)
         game_over_text = font.render("GAME OVER", True, Red)
         restart_text = font.render("Drücke SPACE zum Neustart", True, White)
         
-        screen.blit(game_over_text, (300, 300))
-        screen.blit(restart_text, (200, 400))
+        # Zentriere die Texte horizontal und vertikal
+        screen_center_x = current_screen_size[0] // 2
+        screen_center_y = current_screen_size[1] // 2
+        
+        game_over_rect = game_over_text.get_rect(center=(screen_center_x, screen_center_y - int(40 * scale_y)))
+        restart_rect = restart_text.get_rect(center=(screen_center_x, screen_center_y + int(40 * scale_y)))
+        
+        screen.blit(game_over_text, game_over_rect)
+        screen.blit(restart_text, restart_rect)
     
     pygame.display.flip()
     clock.tick(30)
